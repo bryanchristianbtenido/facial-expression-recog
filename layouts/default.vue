@@ -6,7 +6,7 @@
 
       <!-- Centered Title -->
       <v-toolbar-title class="text-center font-weight-bold red--text text--accent-2">
-        🔴 Video Player
+        😊 Facial Expression Recognition
       </v-toolbar-title>
 
       <v-spacer />
