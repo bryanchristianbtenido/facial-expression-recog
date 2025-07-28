@@ -1,14 +1,14 @@
-<template>
-  <FaceExpression />
-</template>
-
 <script>
-import FaceExpression from '@/components/FaceExpression.vue'
-
 export default {
-  name: 'IndexPage',
-  components: {
-    FaceExpression
+  middleware: 'auth',
+  mounted() {
+    this.$router.replace('/home') // ✅ Redirect to your home.vue
   }
 }
 </script>
+
+<template>
+  <div>
+    Redirecting to home...
+  </div>
+</template>
