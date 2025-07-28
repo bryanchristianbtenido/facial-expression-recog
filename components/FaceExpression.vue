@@ -1,32 +1,51 @@
 <template>
-  <v-container fluid class="py-10">
+  <v-container>
     <v-row justify="center">
       <v-col cols="12" sm="10" class="text-center">
-        <h2 class="mb-4">🧠 Facial Expression Detection</h2>
+        <h2 class="mb-6">🧠 Facial Expression Detection</h2>
 
-        <v-btn
-          color="deep-purple accent-4"
-          class="mb-6 white--text"
-          large
-          :loading="loading"
-          :disabled="detecting"
-          @click="startDetection"
+        <!-- Video Preview -->
+        <v-sheet
+          elevation="4"
+          class="mx-auto rounded-lg overflow-hidden"
+          max-width="600"
         >
-          <v-icon left>mdi-face-recognition</v-icon>
-          {{ loading ? 'Starting...' : 'Start Detection' }}
-        </v-btn>
+          <video
+            ref="video"
+            autoplay
+            muted
+            playsinline
+            style="width: 100%; height: auto;"
+          />
+        </v-sheet>
 
-        <video
-          v-show="detecting"
-          ref="video"
-          autoplay
-          muted
-          playsinline
-          class="rounded"
-          style="width: 100%; max-width: 600px; height: auto"
-        />
+        <!-- Controls -->
+        <div class="my-4">
+          <v-btn
+            :color="isRunning ? 'error' : 'success'"
+            class="mr-2"
+            rounded
+            large
+            @click="toggleCamera"
+          >
+            <v-icon left>{{ isRunning ? 'mdi-stop' : 'mdi-play' }}</v-icon>
+            {{ isRunning ? 'Stop' : 'Start' }}
+          </v-btn>
 
-        <div class="mt-4" v-if="Object.keys(expressions).length">
+          <v-btn
+            color="primary"
+            rounded
+            large
+            @click="flipCamera"
+            :disabled="!isRunning"
+          >
+            <v-icon left>mdi-camera-switch</v-icon>
+            Flip Camera
+          </v-btn>
+        </div>
+
+        <!-- Expressions -->
+        <v-row justify="center" class="mt-4">
           <v-chip
             v-for="(value, emotion) in expressions"
             :key="emotion"
@@ -35,7 +54,7 @@
           >
             {{ emotion }}: {{ (value * 100).toFixed(1) }}%
           </v-chip>
-        </div>
+        </v-row>
       </v-col>
     </v-row>
   </v-container>
@@ -45,44 +64,64 @@
 export default {
   data() {
     return {
-      loading: false,
-      detecting: false,
-      expressions: {}
+      expressions: {},
+      isRunning: false,
+      currentStream: null,
+      usingFrontCamera: true,
+      detectionLoopHandle: null
     }
   },
   methods: {
-    async startDetection() {
-      this.loading = true
+    async toggleCamera() {
+      if (this.isRunning) {
+        this.stopCamera()
+      } else {
+        await this.startCamera()
+      }
+    },
 
+    async startCamera() {
       try {
-        const video = this.$refs.video
-
-        // Load face-api models
-        await this.$faceapi.nets.tinyFaceDetector.loadFromUri('/models')
-        await this.$faceapi.nets.faceExpressionNet.loadFromUri('/models')
-
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const constraints = {
           video: {
-            facingMode: { ideal: 'user' },
+            facingMode: this.usingFrontCamera ? 'user' : 'environment',
             width: { ideal: 640 },
             height: { ideal: 480 }
           },
           audio: false
-        })
+        }
 
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
+        this.currentStream = stream
+        const video = this.$refs.video
         video.srcObject = stream
-
         video.onloadedmetadata = () => {
           video.play()
-          this.detecting = true
-          this.loading = false
           this.detectLoop()
         }
+
+        this.isRunning = true
       } catch (err) {
-        this.loading = false
-        alert('Camera access denied or not available.')
+        alert('Failed to access camera')
         console.error(err)
       }
+    },
+
+    stopCamera() {
+      if (this.currentStream) {
+        this.currentStream.getTracks().forEach(track => track.stop())
+        this.currentStream = null
+      }
+
+      this.isRunning = false
+      cancelAnimationFrame(this.detectionLoopHandle)
+      this.expressions = {}
+    },
+
+    async flipCamera() {
+      this.stopCamera()
+      this.usingFrontCamera = !this.usingFrontCamera
+      await this.startCamera()
     },
 
     async detectLoop() {
@@ -90,19 +129,29 @@ export default {
       const options = new this.$faceapi.TinyFaceDetectorOptions({ inputSize: 160 })
 
       const loop = async () => {
+        if (!this.isRunning) return
         const result = await this.$faceapi
           .detectSingleFace(video, options)
           .withFaceExpressions()
 
-        if (result?.expressions) {
+        if (result && result.expressions) {
           this.expressions = result.expressions
         }
 
-        requestAnimationFrame(loop)
+        this.detectionLoopHandle = requestAnimationFrame(loop)
       }
 
       loop()
     }
+  },
+  beforeDestroy() {
+    this.stopCamera()
   }
 }
 </script>
+
+<style scoped>
+video {
+  border-radius: 12px;
+}
+</style>
